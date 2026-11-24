@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vercel + Neon — Тестовая доска заметок</title>
+  <title>Vercel + Render + Neon — Тестовая доска заметок</title>
   <style>
     :root {
       --bg: #0b0e14;
@@ -29,7 +29,7 @@
     }
     .container {
       width: 100%;
-      max-width: 680px;
+      max-width: 720px;
     }
     .header {
       display: flex;
@@ -37,29 +37,38 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      margin-bottom: 24px;
+      margin-bottom: 18px;
     }
     h1 {
       margin: 0;
-      font-size: 1.5rem;
+      font-size: 1.45rem;
       letter-spacing: -0.02em;
     }
     .pill {
       display: inline-flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 8px;
       padding: 6px 12px;
       border-radius: 999px;
       background: var(--surface);
       border: 1px solid var(--border);
-      font-size: 0.85rem;
+      font-size: 0.84rem;
       color: var(--muted);
+    }
+    .pill a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .pill a:hover {
+      text-decoration: underline;
     }
     .dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
       background: var(--muted);
+      flex-shrink: 0;
     }
     .dot.ok {
       background: var(--accent);
@@ -68,6 +77,32 @@
     .dot.err {
       background: var(--danger);
       box-shadow: 0 0 8px var(--danger);
+    }
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .tab-btn {
+      padding: 9px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .tab-btn:hover {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+    .tab-btn.active {
+      background: rgba(0, 229, 153, 0.14);
+      border-color: var(--accent);
+      color: var(--accent);
     }
     .card {
       background: var(--surface);
@@ -170,11 +205,21 @@
 <body>
   <main class="container">
     <div class="header">
-      <h1>Vercel + Neon — Тестовая доска заметок</h1>
+      <h1>Vercel + Render + Neon — Тестовая доска заметок</h1>
       <div class="pill" id="status-pill">
         <span class="dot" id="status-dot"></span>
-        <span id="status-text">Подключение к Neon…</span>
+        <span id="status-text">Подключение…</span>
+        <span id="status-link"></span>
       </div>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Выбор бэкенда">
+      <button class="tab-btn active" type="button" data-mode="render">
+        Render (Backend + Postgres)
+      </button>
+      <button class="tab-btn" type="button" data-mode="neon">
+        Neon (Vercel Serverless + Neon)
+      </button>
     </div>
 
     <section class="card">
@@ -193,23 +238,51 @@
 
     <section class="card">
       <div class="notes-list" id="notes-list">
-        <div class="empty">Загрузка заметок из Postgres…</div>
+        <div class="empty">Загрузка заметок…</div>
       </div>
     </section>
   </main>
 
   <script>
+    const MODES = {
+      render: {
+        endpoint: '/api/render-notes',
+        connectingText: 'Подключение к Render (если сервис спал, подождите до 30–50 сек)…',
+        label: 'Render Web Service → Render Postgres',
+      },
+      neon: {
+        endpoint: '/api/notes',
+        connectingText: 'Подключение к Neon Postgres…',
+        label: 'Vercel Serverless → Neon Postgres',
+      },
+    };
+
+    let activeMode = 'render';
+
     const statusDot = document.getElementById('status-dot');
     const statusText = document.getElementById('status-text');
+    const statusLink = document.getElementById('status-link');
     const notesList = document.getElementById('notes-list');
     const noteForm = document.getElementById('note-form');
     const noteInput = document.getElementById('note-input');
     const submitBtn = document.getElementById('submit-btn');
     const errorMsg = document.getElementById('error-msg');
+    const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
 
-    function setStatus(ok, text) {
-      statusDot.className = 'dot ' + (ok ? 'ok' : 'err');
+    function setStatus(state, text, renderUrl) {
+      statusDot.className = 'dot' + (state === 'ok' ? ' ok' : state === 'err' ? ' err' : '');
       statusText.textContent = text;
+      statusLink.replaceChildren();
+      if (renderUrl && typeof renderUrl === 'string' && renderUrl.startsWith('https://')) {
+        const sep = document.createTextNode(' • ');
+        const link = document.createElement('a');
+        link.href = renderUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Render API';
+        statusLink.appendChild(sep);
+        statusLink.appendChild(link);
+      }
     }
 
     function formatDate(iso) {
@@ -261,26 +334,37 @@
     }
 
     async function loadNotes() {
+      const cfg = MODES[activeMode];
+      const requestedMode = activeMode;
       errorMsg.textContent = '';
+      setStatus('loading', cfg.connectingText, null);
+
       try {
-        const res = await fetch('/api/notes');
+        const res = await fetch(cfg.endpoint);
         const data = await res.json();
+        if (requestedMode !== activeMode) return;
         if (!res.ok || !data.ok) {
           throw new Error(data.error || 'Ошибка загрузки');
         }
-        setStatus(true, 'Neon Postgres подключён • ' + formatDate(data.dbTime));
+        setStatus(
+          'ok',
+          cfg.label + ' • ' + formatDate(data.dbTime),
+          activeMode === 'render' ? data.renderUrl : null
+        );
         renderNotes(data.notes);
       } catch (err) {
-        setStatus(false, 'Ошибка подключения к БД');
+        if (requestedMode !== activeMode) return;
+        setStatus('err', 'Ошибка подключения к БД', null);
         errorMsg.textContent = err.message;
       }
     }
 
     async function deleteNote(id, btn) {
+      const cfg = MODES[activeMode];
       btn.disabled = true;
       errorMsg.textContent = '';
       try {
-        const res = await fetch('/api/notes?id=' + encodeURIComponent(id), {
+        const res = await fetch(cfg.endpoint + '?id=' + encodeURIComponent(id), {
           method: 'DELETE',
         });
         const data = await res.json();
@@ -299,10 +383,11 @@
       const text = noteInput.value.trim();
       if (!text) return;
 
+      const cfg = MODES[activeMode];
       submitBtn.disabled = true;
       errorMsg.textContent = '';
       try {
-        const res = await fetch('/api/notes', {
+        const res = await fetch(cfg.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text }),
@@ -319,6 +404,23 @@
         submitBtn.disabled = false;
       }
     });
+
+    for (const btn of tabButtons) {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        if (!mode || mode === activeMode) return;
+        activeMode = mode;
+        for (const other of tabButtons) {
+          other.classList.toggle('active', other.dataset.mode === activeMode);
+        }
+        notesList.replaceChildren();
+        const loadingEl = document.createElement('div');
+        loadingEl.className = 'empty';
+        loadingEl.textContent = 'Загрузка заметок…';
+        notesList.appendChild(loadingEl);
+        loadNotes();
+      });
+    }
 
     loadNotes();
   </script>
