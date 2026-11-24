@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vercel + Neon — Тестовая доска заметок</title>
+  <style>
+    :root {
+      --bg: #0b0e14;
+      --surface: #121824;
+      --surface-2: #192232;
+      --border: #253147;
+      --text: #e6edf7;
+      --muted: #8b9bb4;
+      --accent: #00e599;
+      --accent-dark: #00b87a;
+      --danger: #ff5c7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: radial-gradient(circle at top, #131c2e 0%, var(--bg) 55%);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 36px 16px;
+    }
+    .container {
+      width: 100%;
+      max-width: 680px;
+    }
+    .header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      letter-spacing: -0.02em;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+    .dot.ok {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+    .dot.err {
+      background: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 18px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    }
+    form {
+      display: flex;
+      gap: 10px;
+    }
+    input[type="text"] {
+      flex: 1;
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.95rem;
+      outline: none;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+    button {
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.92rem;
+      transition: opacity 0.15s, background 0.15s;
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      padding: 11px 18px;
+      background: var(--accent);
+      color: #05140e;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-dark);
+    }
+    .btn-del {
+      padding: 6px 11px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    .btn-del:hover:not(:disabled) {
+      border-color: var(--danger);
+      color: var(--danger);
+    }
+    .error-msg {
+      margin-top: 10px;
+      color: var(--danger);
+      font-size: 0.88rem;
+      min-height: 1.1em;
+    }
+    .notes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .note-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+    }
+    .note-body {
+      min-width: 0;
+      flex: 1;
+    }
+    .note-text {
+      margin: 0 0 4px 0;
+      word-break: break-word;
+      font-size: 0.96rem;
+    }
+    .note-meta {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 20px 0;
+      font-size: 0.92rem;
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <div class="header">
+      <h1>Vercel + Neon — Тестовая доска заметок</h1>
+      <div class="pill" id="status-pill">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">Подключение к Neon…</span>
+      </div>
+    </div>
+
+    <section class="card">
+      <form id="note-form">
+        <input
+          id="note-input"
+          type="text"
+          maxlength="280"
+          placeholder="Напишите тестовую заметку (до 280 символов)…"
+          required
+        />
+        <button class="btn-primary" id="submit-btn" type="submit">Добавить</button>
+      </form>
+      <div class="error-msg" id="error-msg"></div>
+    </section>
+
+    <section class="card">
+      <div class="notes-list" id="notes-list">
+        <div class="empty">Загрузка заметок из Postgres…</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const notesList = document.getElementById('notes-list');
+    const noteForm = document.getElementById('note-form');
+    const noteInput = document.getElementById('note-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const errorMsg = document.getElementById('error-msg');
+
+    function setStatus(ok, text) {
+      statusDot.className = 'dot ' + (ok ? 'ok' : 'err');
+      statusText.textContent = text;
+    }
+
+    function formatDate(iso) {
+      try {
+        return new Date(iso).toLocaleString('ru-RU');
+      } catch {
+        return String(iso);
+      }
+    }
+
+    function renderNotes(notes) {
+      notesList.replaceChildren();
+      if (!notes || notes.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Заметок пока нет. Добавьте первую выше!';
+        notesList.appendChild(empty);
+        return;
+      }
+
+      for (const note of notes) {
+        const item = document.createElement('div');
+        item.className = 'note-item';
+
+        const body = document.createElement('div');
+        body.className = 'note-body';
+
+        const textEl = document.createElement('p');
+        textEl.className = 'note-text';
+        textEl.textContent = note.text;
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'note-meta';
+        metaEl.textContent = '#' + note.id + ' • ' + formatDate(note.created_at);
+
+        body.appendChild(textEl);
+        body.appendChild(metaEl);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-del';
+        delBtn.type = 'button';
+        delBtn.textContent = 'Удалить';
+        delBtn.addEventListener('click', () => deleteNote(note.id, delBtn));
+
+        item.appendChild(body);
+        item.appendChild(delBtn);
+        notesList.appendChild(item);
+      }
+    }
+
+    async function loadNotes() {
+      errorMsg.textContent = '';
+      try {
+        const res = await fetch('/api/notes');
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Ошибка загрузки');
+        }
+        setStatus(true, 'Neon Postgres подключён • ' + formatDate(data.dbTime));
+        renderNotes(data.notes);
+      } catch (err) {
+        setStatus(false, 'Ошибка подключения к БД');
+        errorMsg.textContent = err.message;
+      }
+    }
+
+    async function deleteNote(id, btn) {
+      btn.disabled = true;
+      errorMsg.textContent = '';
+      try {
+        const res = await fetch('/api/notes?id=' + encodeURIComponent(id), {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Не удалось удалить заметку');
+        }
+        await loadNotes();
+      } catch (err) {
+        errorMsg.textContent = err.message;
+        btn.disabled = false;
+      }
+    }
+
+    noteForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = noteInput.value.trim();
+      if (!text) return;
+
+      submitBtn.disabled = true;
+      errorMsg.textContent = '';
+      try {
+        const res = await fetch('/api/notes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || 'Не удалось сохранить заметку');
+        }
+        noteInput.value = '';
+        await loadNotes();
+      } catch (err) {
+        errorMsg.textContent = err.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    loadNotes();
+  </script>
+</body>
+</html>
